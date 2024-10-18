@@ -11,19 +11,28 @@ public class Translator {
 
     private static final String DICTIONARY_FILE = "dictionary_EngtoRus.txt";
     private Map<String, String> dictionary = new HashMap<>();
+    private int maxPhraseLength = 1;
 
     // Метод для чтения словаря из файла
-    public void loadDictionary() {
+    public void loadDictionary() throws InvalidFileFormatException, FileReadException {
         try (BufferedReader reader = new BufferedReader(new FileReader(DICTIONARY_FILE))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split("\\|");
                 if (parts.length == 2) {
-                    dictionary.put(parts[0].trim().toLowerCase(), parts[1].trim());
+                    String key = parts[0].trim().toLowerCase();
+                    dictionary.put(key, parts[1].trim());
+                    // Обновление максимальной длины фразы
+                    int wordCount = key.split(" ").length;
+                    if (wordCount > maxPhraseLength) {
+                        maxPhraseLength = wordCount;
+                    }
+                } else {
+                    throw new InvalidFileFormatException("Неверный формат строки в словаре: " + line);
                 }
             }
         } catch (IOException e) {
-            System.err.println("Ошибка при чтении словаря: " + e.getMessage());
+            throw new FileReadException("Ошибка при чтении файла словаря: " + e.getMessage());
         }
     }
 
@@ -32,12 +41,29 @@ public class Translator {
         String[] words = input.split(" ");
         StringBuilder translatedText = new StringBuilder();
 
-        for (String word : words) {
-            String lowerCaseWord = word.toLowerCase();
-            if (dictionary.containsKey(lowerCaseWord)) {
-                translatedText.append(dictionary.get(lowerCaseWord)).append(" ");
-            } else {
-                translatedText.append(word).append(" ");
+        int i = 0;
+        while (i < words.length) {
+            boolean found = false;
+            int maxMatchLength = Math.min(maxPhraseLength, words.length - i);
+            for (int len = maxMatchLength; len > 0; len--) {
+                StringBuilder phraseBuilder = new StringBuilder();
+                for (int j = 0; j < len; j++) {
+                    if (j > 0) {
+                        phraseBuilder.append(" ");
+                    }
+                    phraseBuilder.append(words[i + j].toLowerCase());
+                }
+                String phrase = phraseBuilder.toString();
+                if (dictionary.containsKey(phrase)) {
+                    translatedText.append(dictionary.get(phrase)).append(" ");
+                    i += len;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                translatedText.append(words[i]).append(" ");
+                i++;
             }
         }
 
@@ -45,8 +71,16 @@ public class Translator {
     }
 
     public static void main(String[] args) {
-        Translator translator = new Translator();  // Исправлено имя переменной
-        translator.loadDictionary();
+        Translator translator = new Translator();
+        try {
+            translator.loadDictionary();
+        } catch (InvalidFileFormatException e) {
+            System.err.println("Ошибка формата файла словаря: " + e.getMessage());
+            return;
+        } catch (FileReadException e) {
+            System.err.println("Ошибка чтения файла словаря: " + e.getMessage());
+            return;
+        }
 
         Scanner scanner = new Scanner(System.in);
         System.out.println("Введите текст для перевода:");
@@ -54,5 +88,19 @@ public class Translator {
 
         String translatedText = translator.translate(input);
         System.out.println("Перевод: " + translatedText);
+    }
+
+    // Класс исключения для неверного формата файла словаря
+    public static class InvalidFileFormatException extends Exception {
+        public InvalidFileFormatException(String message) {
+            super(message);
+        }
+    }
+
+    // Класс исключения для ошибок при чтении файла словаря
+    public static class FileReadException extends Exception {
+        public FileReadException(String message) {
+            super(message);
+        }
     }
 }
